@@ -1,7 +1,7 @@
 tensorflow
 keras==2.14.0
 numpy==1.25.2
-opencv-contrib-python==4.8.1.78
+opencv-contrib-python
 opencv-python-headless==4.8.1.78
 pandas==2.1.1
 plotly==5.17.0

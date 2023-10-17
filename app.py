@@ -130,10 +130,9 @@ with st.container():
     col1, col2, col3, col4 = st.columns((2, 0.5, 0.5, 0.5))
     with col3:
         st.markdown("***Choose your genre:***")
-        genre = st.radio("", genre_names, index=genre_names.index("Pop"))
+        genre = st.radio("Choose your genre:", genre_names, index=genre_names.index("Pop"), label_visibility=False)
     with col4:
-        st.markdown("***Choose an emotion:***")
-        selected_emotion = st.selectbox('', list(emotion_presets.keys()) + ["Start Camera"], index=list(emotion_presets.keys()).index('Neutral'))
+        selected_emotion = st.selectbox('Choose an emotion:', list(emotion_presets.keys()) + ["Start Camera"], index=list(emotion_presets.keys()).index('Neutral'), label_visibility=False)
         
         if selected_emotion == "Start Camera":
             st.write("Starting camera for emotion detection...")
