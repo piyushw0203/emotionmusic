@@ -127,7 +127,7 @@ st.write("First of all, welcome! This is the place where you can customize what 
 st.markdown("##")
 
 with st.container():
-    col1, col2, col3, col4 = st.columns((1, 1, 1, 1))
+    col1, col2, col3, col4 = st.columns((2.3, 0.5, 1, 1.2))
     with col3:
         st.markdown("***Choose your genre:***")
         genre = st.radio("Choose your genre:", genre_names, index=genre_names.index("Pop"), label_visibility='hidden')
