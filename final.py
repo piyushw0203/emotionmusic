@@ -3,70 +3,31 @@ import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 import plotly.express as px
 import streamlit.components.v1 as components
-from keras.models import load_model
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
 import cv2
 import numpy as np
+from keras.models import load_model
 
+st.set_page_config(page_title="Spotify Song Recommendation Engine", layout="wide")
 
-
-
-# Load emotion detection model
-classifier = load_model('facialemotionmodel.h5')
-emotion_labels = ['Angry', 'Disgust', 'Fear', 'Happy', 'Neutral', 'Sad', 'Surprise']
+model_path = "facialemotionmodel.h5"
+emotion_model = load_model(model_path)
+emotions = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral']
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-acousticness = 0.5
-danceability = 0.5
-energy = 0.5
-instrumentalness = 0.5
-valence = 0.5
-tempo = 120.0
+def detect_emotion(face, model):
+    face = cv2.resize(face, (48, 48))
+    face = face.astype('float32') / 255.0
+    face = np.reshape(face, (1, 48, 48, 1))
+    prediction = model.predict(face)
+    return emotions[np.argmax(prediction)]
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.latest_emotion = None
-
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(
-            image=img_gray, scaleFactor=1.3, minNeighbors=5)
-        for (x, y, w, h) in faces:
-            cv2.rectangle(img=img, pt1=(x, y), pt2=(
-                x + w, y + h), color=(0, 255, 255), thickness=2)
-            roi_gray = img_gray[y:y + h, x:x + w]
-            roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
-            output = "Unknown"
-            if np.sum([roi_gray]) != 0:
-                roi = roi_gray.astype('float') / 255.0
-                roi = np.reshape(roi, (1, 48, 48, 1))
-                prediction = classifier.predict(roi)[0]
-                maxindex = int(np.argmax(prediction))
-                self.latest_emotion = emotion_labels[maxindex]
-                output = self.latest_emotion
-                with open('latest_emotion.txt', 'w') as file:
-                    file.write(self.latest_emotion)
-            label_position = (x, y - 10)
-            cv2.putText(img, output, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        return img
-    
-    def get_latest_emotion(self):
-        return self.latest_emotion
-
-video_transformer = VideoTransformer()
-
-# Load song recommendation data
+@st.cache_resource
 def load_data():
     df = pd.read_csv("filtered_track_df.csv")
     df['genres'] = df.genres.apply(lambda x: [i[1:-1] for i in str(x)[1:-1].split(", ")])
     exploded_track_df = df.explode("genres")
     return exploded_track_df
 exploded_track_df = load_data()
-genre_names = ['Dance Pop', 'Electronic', 'Electropop', 'Hip Hop', 'Jazz', 'K-pop', 'Latin', 'Pop', 'Pop Rap', 'R&B', 'Rock']
-audio_feats = ["acousticness", "danceability", "energy", "instrumentalness", "valence", "tempo"]
-
-
 genre_names = ['Dance Pop', 'Electronic', 'Electropop', 'Hip Hop', 'Jazz', 'K-pop', 'Latin', 'Pop', 'Pop Rap', 'R&B', 'Rock']
 audio_feats = ["acousticness", "danceability", "energy", "instrumentalness", "valence", "tempo"]
 
@@ -95,31 +56,6 @@ def n_neighbors_uri_audio(genre, start_year, end_year, test_feat):
     audios = genre_data.iloc[n_neighbors][audio_feats].to_numpy()
     return uris, audios
 
-import os
-
-if os.path.exists('latest_emotion.txt'):
-    with open('latest_emotion.txt', 'r') as file:
-        detected_emotion = file.read().strip()
-        if detected_emotion in emotion_presets:
-            selected_emotion = detected_emotion
-
-# Get the preset values for the sliders based on the selected emotion
-if selected_emotion and selected_emotion in emotion_presets:
-    acousticness_default = emotion_presets[selected_emotion]['acousticness']
-    danceability_default = emotion_presets[selected_emotion]['danceability']
-    energy_default = emotion_presets[selected_emotion]['energy']
-    instrumentalness_default = emotion_presets[selected_emotion]['instrumentalness']
-    valence_default = emotion_presets[selected_emotion]['valence']
-    tempo_default = emotion_presets[selected_emotion]['tempo']
-else:
-    # Default values if no emotion detected
-    acousticness_default = 0.5
-    danceability_default = 0.5
-    energy_default = 0.5
-    instrumentalness_default = 0.5
-    valence_default = 0.5
-    tempo_default = 120.0
-
 title = "Spotify Song Recommendation Engine"
 st.title(title)
 
@@ -127,41 +63,58 @@ st.write("First of all, welcome! This is the place where you can customize what 
 st.markdown("##")
 
 with st.container():
-    col1, col2, col3, col4 = st.columns((2.3, 0.5, 1, 1.2))
+    col1, col2, col3, col4 = st.columns((2, 0.5, 0.5, 0.5))
     with col3:
         st.markdown("***Choose your genre:***")
-        genre = st.radio("Choose your genre:", genre_names, index=genre_names.index("Pop"), label_visibility='hidden')
+        genre = st.radio("", genre_names, index=genre_names.index("Pop"))
     with col4:
-        selected_emotion = st.selectbox('Choose an emotion:', list(emotion_presets.keys()) + ["Start Camera"], index=list(emotion_presets.keys()).index('Neutral'), label_visibility='hidden')
+        st.markdown("***Choose an emotion:***")
+        selected_emotion = st.selectbox('', list(emotion_presets.keys()) + ["Start Camera"], index=list(emotion_presets.keys()).index('Neutral'))
         
         if selected_emotion == "Start Camera":
-            st.write("Starting camera for emotion detection")
-            webrtc_streamer(key="example", video_processor_factory=lambda: video_transformer)
-            if st.button('Stop'):
-                try:
-                    with open('latest_emotion.txt', 'r') as file:
-                        latest_emotion = file.read()
-                    st.write(f'Latest detected emotion: {latest_emotion}')
-                except FileNotFoundError:
-                    st.write("No emotion detected yet.")
-        else:
-            acousticness = emotion_presets[selected_emotion]['acousticness']
-            danceability = emotion_presets[selected_emotion]['danceability']
-            energy = emotion_presets[selected_emotion]['energy']
-            instrumentalness = emotion_presets[selected_emotion]['instrumentalness']
-            valence = emotion_presets[selected_emotion]['valence']
-            tempo = emotion_presets[selected_emotion]['tempo']
+            placeholder = st.empty()
+            cap = cv2.VideoCapture(0)
+            detected_emotion = None
 
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+
+                for (x, y, w, h) in faces:
+                    face = gray[y:y+h, x:x+w]
+                    detected_emotion = detect_emotion(face, emotion_model)
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    cv2.putText(frame, detected_emotion, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36,255,12), 2)
+
+                placeholder.image(frame, channels="BGR", caption="Detecting Emotion")
+
+                if detected_emotion:
+                    break
+
+            cap.release()
+            st.write(f"Detected Emotion: **{detected_emotion}**")
+            if detected_emotion in emotion_presets:
+                selected_emotion = detected_emotion
+    if selected_emotion:
+        acousticness = emotion_presets[selected_emotion]['acousticness']
+        danceability = emotion_presets[selected_emotion]['danceability']
+        energy = emotion_presets[selected_emotion]['energy']
+        instrumentalness = emotion_presets[selected_emotion]['instrumentalness']
+        valence = emotion_presets[selected_emotion]['valence']
+        tempo = emotion_presets[selected_emotion]['tempo']
     with col1:
         st.markdown("***Choose features to customize:***")
         start_year, end_year = st.slider('Select the year range', 1990, 2019, (2015, 2019))
-        acousticness = st.slider('Acousticness', 0.0, 1.0, acousticness_default)
-        danceability = st.slider('Danceability', 0.0, 1.0, danceability_default)
-        energy = st.slider('Energy', 0.0, 1.0, energy_default)
-        instrumentalness = st.slider('Instrumentalness', 0.0, 1.0, instrumentalness_default)
-        valence = st.slider('Valence', 0.0, 1.0, valence_default)
-        tempo = st.slider('Tempo', 0.0, 244.0, tempo_default)
-
+        acousticness = st.slider('Acousticness', 0.0, 1.0, acousticness)
+        danceability = st.slider('Danceability', 0.0, 1.0, danceability)
+        energy = st.slider('Energy', 0.0, 1.0, energy)
+        instrumentalness = st.slider('Instrumentalness', 0.0, 1.0, instrumentalness)
+        valence = st.slider('Valence', 0.0, 1.0, valence)
+        tempo = st.slider('Tempo', 0.0, 244.0, tempo)
 
 test_feat = [acousticness, danceability, energy, instrumentalness, valence, tempo]
 uris, audios = n_neighbors_uri_audio(genre, start_year, end_year, test_feat)
@@ -182,8 +135,6 @@ if current_inputs != st.session_state['previous_inputs']:
 
 if 'start_track_i' not in st.session_state:
     st.session_state['start_track_i'] = 0
-
-
 
 with st.container():
     col1, col2, col3 = st.columns([2,1,2])
